@@ -1,0 +1,221 @@
+-- USE [HBCAMS_IntegrationDB]
+-- GO
+-- SELECT [GUID]
+--      , [datafreeze_type]
+--      , [business_name]
+--      , [division_id]
+--      , [division_name]
+--      , [distributor_id]
+--      , [distributor_name]
+--      , [account_id]
+--      , [account_name]
+--      , [approve_cluster_name]
+--      , [account_channel]
+--      , [delivery_lag]
+--      , [sales_channel]
+--      , [nrm]
+--      , [rating]
+--      , [hq]
+--      , [is_it_have_parent]
+--      , [is_covered_by_nielsen]
+--      , [apopartner_code]
+--      , [apopartner_name]
+--      , [promo_id]
+--      , [promo_key]
+--      , [promo_name]
+--      , [promo_short_name]
+--      , [order_from]
+--      , [order_to]
+--      , [delivery_from]
+--      , [delivery_to]
+--      , [onshelf_from]
+--      , [onshelf_to]
+--      , [mechanics]
+--      , [mechanics_individual]
+--      , [mechanics_1]
+--      , [mechanics_2]
+--      , [promo_type]
+--      , [is_scenario_included_working]
+--      , [henkel_promo_status]
+--      , [promo_class]
+--      , [pc_guideline]
+--      , [ppd_guideline]
+--      , [roi_guideline]
+--      , [line_name]
+--      , [category_name]
+--      , [brand_id]
+--      , [brand_name]
+--      , [product_id]
+--      , [product_name]
+--      , [ean]
+--      , [lst_status]
+--      , [national_listing_date]
+--      , [national_delisting_date]
+--      , [product_volume]
+--      , [shipment_date]
+--      , [delivery_date]
+--      , [forecast_status]
+--      , [scenario]
+--      , [activity_type]
+--      , [data_type]
+--      , [data_type_lvl0]
+--      , [data_type_lvl1]
+--      , [data_type_lvl2]
+--      , [con]
+--      , [rp]
+--      , [ges]
+--      , [nes]
+--      , [pld]
+--      , [pxd]
+--      , [ppd]
+--      , [ppd_distr]
+--      , [oncch]
+--      , [oncdb]
+--      , [offcch]
+--      , [offcdb]
+--      , [offextra]
+--      , [offextra_abs]
+--      , [comm]
+--      , [trwh]
+--      , [matcost]
+--      , [l17]
+--      , [gp1]
+--      , [gp2]
+--      , [offc_promo_abs]
+--      , [offc_promo_perc]
+--      , [bs_con_fc]
+--      , [shelf_disc]
+--      , [price_pld]
+--      , [price_ges]
+--      , [trdcond_On_cdb]
+--      , [trdcond_Off_cdb]
+--      , [cpv]
+--      , SUM([cpv])
+--            OVER (PARTITION BY [datafreeze_type], [distributor_id], DATEADD(MM, DATEDIFF(MM, 0, [delivery_date]), 0)) as [total_cpv]
+--      , [trade_condition].[amount]                                                                                    AS [trade_condition]
+-- FROM [HBCAMS_IntegrationDB].[bi].[OpenPeriodFreeze_test] [main]
+--          OUTER APPLY (
+-- -- Запрос для получения Торговых условий дистрибьютора
+--     SELECT TOP 1 ISNULL([amount], 10000) as [amount]
+--     FROM [HBCAMS_IntegrationDB].[bi].[TradeCondition_Plan]
+--     WHERE [subtype_name] = 'OFF'
+--       AND [type_name] = 'Sales_Force_DB'
+--       AND [account_id] = [main].[distributor_id]
+--       AND [date_from] <= [main].[shipment_date]
+--     ORDER BY [date_from] DESC
+-- ) [trade_condition]
+-- WHERE [datafreeze_type] = 'Fixed slice'
+--   AND [data_type_lvl0] = 'Forecast'
+--   AND [is_it_have_parent] = 1
+
+
+-- -- Копия боевой таблицы
+-- SELECT *
+-- INTO [HBCAMS_IntegrationDB].[bi].[OpenPeriodFreeze_test]
+-- FROM [HBCAMS_IntegrationDB].[bi].[OpenPeriodFreeze]
+-- WHERE [datafreeze_type] = 'Fixed Slice'
+
+-- -- Попытка выбрать guid строк, которые нужно обраотать
+-- SELECT [GUID]
+-- FROM [HBCAMS_IntegrationDB].[bi].[OpenPeriodFreeze]
+-- WHERE [datafreeze_type] = 'Fixed slice'
+--   AND [data_type_lvl0] = 'Forecast'
+--   AND [is_it_have_parent] = 1
+--
+
+
+-- -- Запрос для получения Тотальной суммы продаж по дистрибьютору у данного ЕП
+-- WITH
+--     -- Estimated Subtree Cost WITHOUT INDX - 170
+--     -- Estimated Subtree Cost WITH INDX - 33
+--     [records_GUID] AS (
+--         SELECT [GUID]
+--         FROM HBCAMS_IntegrationDB.bi.OpenPeriodFreeze
+--         WHERE [datafreeze_type] = 'Fixed slice'
+--           AND [data_type_lvl0] = 'Forecast'
+--           AND [account_id] IN (SELECT account_id from HBCAMS_IntegrationDB.bi.Account where [is_it_have_parent] = 1)
+--     ),
+--     [total_cpv_byMth] AS (
+--         SELECT [acc].[distributor_id]
+--              , DATEADD(MM, DATEDIFF(MM, 0, [shipment_date]), 0) AS [date]
+--              , SUM([cpv])                                       AS [cpv]
+--
+--         FROM [hbcams_integrationdb].[bi].[openperiodfreeze] [fact] WITH (NOLOCK)
+--
+--                  JOIN [hbcams_integrationdb].[bi].[account] [acc] WITH (NOLOCK)
+--                       ON [fact].[account_id] = [acc].[account_id]
+--
+--         WHERE [datafreeze_type] = 'Fixed slice'
+--
+--         GROUP BY DATEADD(MM, DATEDIFF(MM, 0, [shipment_date]), 0)
+--                , [acc].[distributor_id]
+--     )
+
+--/*Расчет абc бюджетов в срезах SF&COMM*/
+-- SELECT [main].[shipment_date]
+--      , [main].[delivery_date]
+--      , [main].[account_id]
+--      , [main].[account_name]
+--      , [main].[product_id]
+--      , [main].[ean]
+--      , [main].[promo_id]
+--      , [main].[promo_name]
+--      , [main].[scenario]
+--      , [main].[activity_type]
+--      , [main].[data_type_lvl0]
+--      , [main].[data_type_lvl1]
+--      , [main].[data_type_lvl2]
+--      , [main].[data_type]
+--      , [main].[con]
+--      , [main].[cpv]
+--      , [main].[rp]
+--      , [main].[ges]
+--      , [main].[nes]
+--      , [main].[pld]
+--      , [main].[pxd]
+--      , [main].[ppd]
+--      , [main].[ppd_distr]
+--      , [main].[oncch]
+--      , [main].[oncdb]
+--      , [main].[offcch]
+--      , [main].[offcdb]
+--      , [main].[offextra]
+--      , [main].[offextra_abs]
+--      , [main].[comm]
+--      , [main].[trwh]
+--      , [main].[matcost]
+--      , [main].[l17]
+--      , [main].[gp1]
+--      , [main].[gp2]
+--      , [main].[offc_promo_abs]
+--      , [main].[offc_promo_perc]
+--      , [main].[bs_con_fc]
+--
+--      --, [acc].[distributor_id]
+--      --, [total_cpv_bymth].[cpv]                                                  AS [total_cpv]
+--      --, [trade_condition].[fake_amount]
+--      --, [main].[cpv] / [total_cpv_bymth].[cpv] * [trade_condition].[fake_amount] AS [OFFcdb_abs]
+--
+-- FROM [HBCAMS_IntegrationDB].[bi].[OpenPeriodFreeze] [main] WITH (NOLOCK)
+--
+-- WHERE [main].[GUID] IN (SELECT * FROM RECORDS_GUID)
+
+
+--JOIN [HBCAMS_IntegrationDB].[bi].[Account] [acc] WITH (NOLOCK)
+--     ON [main].[account_id] = [acc].[account_id]
+
+----LEFT JOIN [total_cpv_byMth]
+----          ON DATEADD(MM, DATEDIFF(MM, 0, [main].[shipment_date]), 0) = [total_cpv_byMth].[date]
+----              AND [acc].[distributor_id] = [total_cpv_byMth].[distributor_id]
+
+----OUTER APPLY (-- Запрос для получения Торговых условий дистрибьютора
+----    SELECT TOP 1 IIF([amount] IS NULL
+----                     , 400000
+----                     , [amount]) AS [fake_amount]
+----    FROM [HBCAMS_IntegrationDB].[bi].[TradeCondition_Plan]
+----    WHERE [subtype_name] = 'OFF'
+----      AND [type_name] = 'Sales_Force_DB'
+----      AND [account_id] = [acc].[distributor_id]
+----      AND [date_from] <= [main].[shipment_date]
+----    ORDER BY [date_from] DESC
+----) [trade_condition]
